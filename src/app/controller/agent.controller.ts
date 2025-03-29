@@ -6,8 +6,9 @@ export class AgentController {
 
     public handleAgentConfig(req: Request, res: Response) {
         let config: AgentConfig = req.body;
-        const serviceResponse = AgentService.handleConfig(config);
-        res.status(200).send(serviceResponse);
+        AgentService.handleConfig(config).then((result) => {
+            res.status(200).send(result)
+        });
     }
 
     public handleMessage(req: Request, res: Response) {
