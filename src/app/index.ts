@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import bodyParser from "body-parser";
 import { defaultRouter } from "./route/default.route";
+import {agentRouter} from "./route/agent.route";
 
 class App {
   public app: express.Application;
@@ -21,6 +22,7 @@ class App {
 
   route() {
     this.app.use("/", defaultRouter);
+    this.app.use("/agent", agentRouter);
   }
 }
 
