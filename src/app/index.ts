@@ -3,6 +3,7 @@ import cors from "cors";
 import bodyParser from "body-parser";
 import { defaultRouter } from "./route/default.route";
 import {agentRouter} from "./route/agent.route";
+import toolsMiddleware from "./middleware/toolsmiddleware";
 
 class App {
   public app: express.Application;
@@ -14,6 +15,7 @@ class App {
   }
 
   middleware() {
+    this.app.use(toolsMiddleware);
     this.app.use(express.json());
     this.app.use(cors());
     this.app.use(bodyParser.urlencoded({ limit: "50mb", extended: false }));

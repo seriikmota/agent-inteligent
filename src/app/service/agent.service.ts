@@ -1,4 +1,4 @@
-import {AgentConfig, ToolConfig} from "../model/AgentConfig";
+import {ToolConfig} from "../model/AgentConfig";
 import {z} from "zod";
 import {DynamicStructuredTool} from "@langchain/core/tools";
 import {createReactAgent} from "@langchain/langgraph/prebuilt";
@@ -13,13 +13,8 @@ const config = { configurable: { thread_id: "1" } };
 export class AgentService {
     public static agent: any = null;
 
-    public static async handleConfig(config: AgentConfig) {
-        this.agent = await this.createAgent(config);
-        return { message: "Agent was created" };
-    }
-
-    public static async handleMessage(message: string) {
-        if (!this.agent) throw new Error("Realize a configuração do agente primeiro!")
+    public static async handleMessage(message: string, tools: Array<ToolConfig>) {
+        this.agent = await this.createAgent(tools)
 
         return { message: await this.processMessage(message) }
     }
@@ -34,15 +29,15 @@ export class AgentService {
         return agentOutput.messages[agentOutput.messages.length - 1].content;
     }
 
-    private static async createAgent(config: AgentConfig) {
+    private static async createAgent(tools: Array<ToolConfig>) {
         const checkpointer = new PostgresSaver(pool);
         await checkpointer.setup();
 
         return createReactAgent({
             llm: this.createLLM(),
-            tools: this.createTools(config.tools),
+            tools: this.createTools(tools),
             checkpointSaver: checkpointer,
-            messageModifier: config.prompt
+            messageModifier: 'Você é um assistente de um sistema de gerenciamento de usuários'
         });
     }
 
