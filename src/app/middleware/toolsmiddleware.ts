@@ -30,8 +30,6 @@ export default async function toolsMiddleware(req: any, res: any, next: any) {
     }
 }
 
-
-
 async function getToolsFromAD(universityId: string): Promise<any> {
     try {
         // const response = await fetch('http://localhost:8080', {

@@ -6,6 +6,7 @@ import {ChatOpenAI} from "@langchain/openai";
 import * as dotenv from "dotenv";
 import {PostgresSaver} from "@langchain/langgraph-checkpoint-postgres";
 import {pool} from "../../server";
+import {StructuredToolInterface} from "@langchain/core/dist/tools";
 
 dotenv.config();
 const config = { configurable: { thread_id: "1" } };
@@ -45,50 +46,97 @@ export class AgentService {
         return new ChatOpenAI( {model: 'gpt-4o-mini', temperature: 0} )
     }
 
-    private static createTools(tools: Array<ToolConfig>): Array<DynamicStructuredTool> {
-        let mountedTools: Array<DynamicStructuredTool> = new Array<DynamicStructuredTool>()
+    private static createTools(tools: Array<ToolConfig>): Array<StructuredToolInterface> {
+        let mountedTools: Array<any> = new Array<any>()
 
         for (let tool of tools) {
-            const schema = z.object(
-                Object.keys(tool.parameters).reduce((acc, key) => {
-                    const param = tool.parameters[key];
-                    switch (param.type) {
-                        case 'number': acc[key] = z.number().describe(param.description); break;
-                        case 'string': acc[key] = z.string().describe(param.description); break;
-                        case 'boolean': acc[key] = z.boolean().describe(param.description); break;
-                        case 'null': acc[key] = z.null(); break;
-                        default:throw new Error(`Tipo de parâmetro não suportado: ${param.type}`);
-                    }
-                    return acc;
-                }, {} as Record<string, z.ZodType>)
-            );
+            let mountedTool;
 
-            let mountedTool = new DynamicStructuredTool({
-                name: tool.name,
-                description: tool.description,
-                schema,
-                func: async (args: any): Promise<string> => {
-                    let finalUrl = tool.url;
-                    for (const [key, value] of Object.entries(args)) {
-                        if (key != 'null')
-                            finalUrl = finalUrl.replace(`{${key}}`, encodeURIComponent((value as string | number | boolean).toString()));
-                        else
-                            finalUrl = finalUrl.replace(`{${key}}`, encodeURIComponent(''));
-                    }
-
-                    const response = await fetch(finalUrl, {
-                        method: tool.method,
-                        headers: { 'Content-Type': 'application/json' },
-                        body: tool.method !== 'GET' ? JSON.stringify(args) : undefined,
-                    });
-                    const data = await response.json();
-                    return JSON.stringify(data);
-                }
-            });
+            if (tool.isRequest)
+                mountedTool = this.createDynamicTool(tool);
+            else
+                mountedTool = this.createStructuredTool(tool);
 
             mountedTools.push(mountedTool);
         }
 
         return mountedTools;
+    }
+
+    private static createDynamicTool(tool: ToolConfig): any {
+        let schema = this.createSchemeTool(tool.parameters)
+        let func = this.createFuncTool(tool);
+        return new DynamicStructuredTool({
+            name: tool.name,
+            description: tool.description,
+            schema: schema,
+            func: func
+        });
+    }
+
+    private static createStructuredTool(tool: ToolConfig): any {
+        let schema = this.createSchemeTool(tool.parameters)
+        return {
+            name: tool.name,
+            description: tool.description,
+            schema: schema,
+        };
+    }
+
+    private static createSchemeTool(parameters: any): any {
+        return !parameters ? z.object({}) : z.object(
+            Object.keys(parameters).reduce((acc, key) => {
+                const param = parameters[key];
+                let parameterZod: z.ZodType;
+
+                switch (param.class) {
+                    case 'number': parameterZod = z.number().describe(param.description); break;
+                    case 'string':  parameterZod = z.string().describe(param.description); break;
+                    case 'boolean': parameterZod = z.boolean().describe(param.description); break;
+                    case 'null': parameterZod = z.null(); break;
+                    default: throw new Error(`Tipo de parâmetro não suportado: ${param.class}`);
+                }
+
+                switch (param.type) {
+                    case 'AUTO' || 'FIXED': acc[key] = parameterZod.nullable(); break;
+                    case 'OPTIONAL': {
+                        acc[key] = parameterZod.optional().nullable();
+                        console.log("OPTIONAL")
+                        break;
+                    }
+                    case 'MANDATORY': acc[key] = parameterZod; break;
+                    default: acc[key] = parameterZod; break;
+                }
+
+                return acc;
+            }, {} as Record<string, z.ZodType>)
+        );
+    }
+
+    private static createFuncTool(tool: ToolConfig) {
+        return async (args: any): Promise<string> => {
+            let finalUrl = tool.url;
+
+            for (const [key, value] of Object.entries(args)) {
+                if (value !== undefined && value !== null) {
+                    finalUrl = finalUrl.replace(`{${key}}`, encodeURIComponent((value as string | number | boolean).toString()));
+                } else {
+                    finalUrl = finalUrl.replace(`{${key}}`, '');
+                }
+            }
+
+            const filteredArgs = Object.fromEntries(
+                Object.entries(args).filter(([_, value]) => value !== undefined)
+            );
+
+            const response = await fetch(finalUrl, {
+                method: tool.method,
+                headers: { 'Content-Type': 'application/json' },
+                body: tool.method !== 'GET' ? JSON.stringify(filteredArgs) : undefined,
+            });
+
+            const data = await response.json();
+            return JSON.stringify(data);
+        }
     }
 }

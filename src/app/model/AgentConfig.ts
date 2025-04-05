@@ -4,7 +4,7 @@ export interface ToolConfig {
     isRequest: boolean
     method: 'GET' | 'POST' | 'PUT' | 'DELETE'
     url: string
-    parameters: Record<string, { type: string, description: string }>
+    parameters: Record<string, { type: string, class: string, description: string }>
 }
 
 export interface CachedTools {
